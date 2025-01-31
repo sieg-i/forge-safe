@@ -8,6 +8,7 @@ pragma solidity >=0.6.2 <0.9.0;
 import {Script, console2, StdChains, stdJson, stdMath, StdStorage, stdStorageSafe, VmSafe} from "forge-std/Script.sol";
 
 import {Surl} from "../lib/surl/src/Surl.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 // ⭐️ SCRIPT
 abstract contract BatchScript is Script {
@@ -97,42 +98,52 @@ abstract contract BatchScript is Script {
         // Set the chain ID
         Chain memory chain = getChain(vm.envString("CHAIN"));
         chainId = chain.chainId;
+        console2.log("isBatch.ChainId: %s", chainId);
 
         // Set the Safe API base URL and multisend address based on chain
         if (chainId == 1) {
             SAFE_API_BASE_URL = "https://safe-transaction-mainnet.safe.global/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761;
-        } else if (chainId == 5) {
-            SAFE_API_BASE_URL = "https://safe-transaction-goerli.safe.global/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761;
-        } else if (chainId == 8453) {
-            SAFE_API_BASE_URL = "https://safe-transaction-base.safe.global/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761;
+            SAFE_MULTISEND_ADDRESS = 0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526;
+        } else if (chainId == 11155111) {
+            SAFE_API_BASE_URL = "https://safe-transaction-sepolia.safe.global/api/v1/safes/";
+            SAFE_MULTISEND_ADDRESS = 0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526;
         } else if (chainId == 42161) {
             SAFE_API_BASE_URL = "https://safe-transaction-arbitrum.safe.global/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761;
+            SAFE_MULTISEND_ADDRESS = 0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526;
         } else if (chainId == 43114) {
             SAFE_API_BASE_URL = "https://safe-transaction-avalanche.safe.global/api/v1/safes/";
-            SAFE_MULTISEND_ADDRESS = 0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761;
+            SAFE_MULTISEND_ADDRESS = 0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526;
         } else {
-            revert("Unsupported chain");
+            string memory errMsg = string(abi.encodePacked("Unsupported chain: ", Strings.toString(chainId)));
+            revert(errMsg);
         }
 
         // Store the provided safe address
         safe = safe_;
 
         // Load wallet information
-        walletType = keccak256(abi.encodePacked(vm.envString("WALLET_TYPE")));
+        string memory envWalletType = vm.envString("WALLET_TYPE");
+        walletType = keccak256(abi.encodePacked(envWalletType));
         if (walletType == LOCAL) {
             privateKey = vm.envBytes32("PRIVATE_KEY");
         } else if (walletType == LEDGER) {
             mnemonicIndex = vm.envUint("MNEMONIC_INDEX");
-        } else {
-            revert("Unsupported wallet type");
+        } else {     
+            revert(string(abi.encodePacked("Unsupported wallet type: ", envWalletType)));
         }
 
         // Run batch
         _;
+    }
+
+    function toHexString(bytes32 data) public pure returns (string memory) {
+        bytes memory alphabet = "0123456789abcdef";
+        bytes memory str = new bytes(64);
+        for (uint i = 0; i < 32; i++) {
+            str[i * 2] = alphabet[uint(uint8(data[i] >> 4))];
+            str[1 + i * 2] = alphabet[uint(uint8(data[i] & 0x0f))];
+        }
+        return string(str);
     }
 
     // Functions to consume in a script
@@ -151,7 +162,6 @@ abstract contract BatchScript is Script {
     ) internal returns (bytes memory) {
         // Add transaction to batch array
         encodedTxns.push(abi.encodePacked(Operation.CALL, to_, value_, data_.length, data_));
-
         // Simulate transaction and get return value
         vm.prank(safe);
         (bool success, bytes memory data) = to_.call{value: value_}(data_);
@@ -447,9 +457,9 @@ abstract contract BatchScript is Script {
         (uint256 status, bytes memory data) = endpoint.get();
         if (status == 200) {
             string memory resp = string(data);
-            string[] memory results;
-            results = resp.readStringArray(".results");
+            bytes memory results = vm.parseJson(resp, ".results");
             if (results.length == 0) return 0;
+
             return resp.readUint(".results[0].nonce") + 1;
         } else {
             revert("Get nonce failed!");
