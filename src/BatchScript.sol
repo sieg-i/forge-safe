@@ -63,9 +63,11 @@ abstract contract BatchScript is Script {
     bytes32 private walletType;
     uint256 private mnemonicIndex;
     bytes32 private privateKey;
+    string private signerAccount;
 
     bytes32 private constant LOCAL = keccak256("local");
     bytes32 private constant LEDGER = keccak256("ledger");
+    bytes32 private constant EMPTY_STRING = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
 
     // Address to send transaction from
     address private safe;
@@ -125,7 +127,10 @@ abstract contract BatchScript is Script {
         string memory envWalletType = vm.envString("WALLET_TYPE");
         walletType = keccak256(abi.encodePacked(envWalletType));
         if (walletType == LOCAL) {
-            privateKey = vm.envBytes32("PRIVATE_KEY");
+            bytes32 empty;
+            privateKey = vm.envOr("PRIVATE_KEY", empty);
+            string memory emptyString = "";
+            signerAccount = vm.envOr("SIGNER_ACCOUNT_NAME", emptyString);
         } else if (walletType == LEDGER) {
             mnemonicIndex = vm.envUint("MNEMONIC_INDEX");
         } else {     
@@ -220,6 +225,7 @@ abstract contract BatchScript is Script {
 
         // Get the safe nonce
         batch.nonce = _getNonce(safe_);
+        console2.log("Nonce: %s", batch.nonce);
 
         // Get the transaction hash
         batch.txHash = _getTransactionHash(safe_, batch);
@@ -236,11 +242,23 @@ abstract contract BatchScript is Script {
         string memory commandStart = "cast wallet sign ";
         string memory wallet;
         if (walletType == LOCAL) {
-            wallet = string.concat(
-                "--private-key ",
-                vm.toString(privateKey),
-                " "
-            );
+            // try with foundry keystore wallet if configured
+            console2.log("SIGNER_ACCOUNT_NAME:", signerAccount);
+            if (keccak256(abi.encodePacked(signerAccount)) != EMPTY_STRING) {
+                wallet = string.concat(
+                    "--account ",
+                    signerAccount,
+                    " "
+                );
+            }
+            else {
+                // fallback to private key mode
+                wallet = string.concat(
+                    "--private-key ",
+                    vm.toString(privateKey),
+                    " "
+                );
+            }
         } else if (walletType == LEDGER) {
             wallet = string.concat(
                 "--ledger --mnemonic-index ",
@@ -265,6 +283,7 @@ abstract contract BatchScript is Script {
             "'"
         );
         bytes memory signature = vm.ffi(inputs);
+        if (signature.length == 0) revert("Wrong signature");
 
         // Set the signature on the batch
         batch_.signature = signature;

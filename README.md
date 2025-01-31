@@ -23,13 +23,14 @@ Steps:
 1. In your .env file
     - Set `CHAIN` to the name of the chain your Safe is on
     - Set `WALLET_TYPE` with `LOCAL` or `LEDGER` depending on your wallet
+    - Set either 
+        + a. `PRIVATE_KEY` (unsafe) or
+        + b. `SIGNER_ACCOUNT_NAME` + `SENDER_ADDRESS`
 2. Import `BatchScript.sol` into your Forge script
 3. add isBatch({SAFE_ADDRESS}) modifier to `function run()`
 4. Call `addToBatch()` for each encoded call
 5. After all encoded txs have been added, call `executeBatch()` with your Safe address and whether to send the transaction
 6. Sign the batch data
-7. ???
-8. Profit
 
 ```js
 import {BatchScript} from "forge-safe/BatchScript.sol";
