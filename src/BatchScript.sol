@@ -64,10 +64,12 @@ abstract contract BatchScript is Script {
     uint256 private mnemonicIndex;
     bytes32 private privateKey;
     string private signerAccount;
+    string private keystorePasswordFile;
 
     bytes32 private constant LOCAL = keccak256("local");
     bytes32 private constant LEDGER = keccak256("ledger");
-    bytes32 private constant EMPTY_STRING = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+    bytes32 private constant KEYSTORE = keccak256("keystore");
+    bytes32 private constant EMPTY_STRING = keccak256("");
 
     // Address to send transaction from
     address private safe;
@@ -127,10 +129,10 @@ abstract contract BatchScript is Script {
         string memory envWalletType = vm.envString("WALLET_TYPE");
         walletType = keccak256(abi.encodePacked(envWalletType));
         if (walletType == LOCAL) {
-            bytes32 empty;
-            privateKey = vm.envOr("PRIVATE_KEY", empty);
-            string memory emptyString = "";
-            signerAccount = vm.envOr("SIGNER_ACCOUNT_NAME", emptyString);
+            privateKey = vm.envBytes32("PRIVATE_KEY");
+        } else if (walletType == KEYSTORE) {
+            signerAccount = vm.envString("SIGNER_ACCOUNT_NAME");
+            keystorePasswordFile = vm.envOr("PASSWORD_FILE", string(""));
         } else if (walletType == LEDGER) {
             mnemonicIndex = vm.envUint("MNEMONIC_INDEX");
         } else {     
@@ -242,21 +244,22 @@ abstract contract BatchScript is Script {
         string memory commandStart = "cast wallet sign ";
         string memory wallet;
         if (walletType == LOCAL) {
-            // try with foundry keystore wallet if configured
-            console2.log("SIGNER_ACCOUNT_NAME:", signerAccount);
-            if (keccak256(abi.encodePacked(signerAccount)) != EMPTY_STRING) {
-                wallet = string.concat(
+            wallet = string.concat(
+                "--private-key ",
+                vm.toString(privateKey),
+                " "
+            );
+        } else if (walletType == KEYSTORE) {
+            wallet = string.concat(
                     "--account ",
                     signerAccount,
                     " "
                 );
-            }
-            else {
-                // fallback to private key mode
-                wallet = string.concat(
-                    "--private-key ",
-                    vm.toString(privateKey),
-                    " "
+
+            if (keccak256(abi.encodePacked(keystorePasswordFile)) != EMPTY_STRING) {
+                wallet = string.concat(wallet,
+                    "--password-file ",
+                    keystorePasswordFile, " "
                 );
             }
         } else if (walletType == LEDGER) {
@@ -283,7 +286,7 @@ abstract contract BatchScript is Script {
             "'"
         );
         bytes memory signature = vm.ffi(inputs);
-        if (signature.length == 0) revert("Wrong signature");
+        if (signature.length == 0) revert("Wrong keystore password!");
 
         // Set the signature on the batch
         batch_.signature = signature;
@@ -320,7 +323,7 @@ abstract contract BatchScript is Script {
         if (status == 201) {
             console2.log("Batch sent successfully");
         } else {
-            console2.log(string(data));
+            console2.log("Error:", string(data));
             revert("Send batch failed!");
         }
     }
