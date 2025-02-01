@@ -3,7 +3,7 @@
 # See more config options at: https://github.com/gakonst/foundry/tree/master/config
 
 [profile.default]
-solc_version = '0.8.17'
+solc_version = '0.8.20'
 auto_detect_solc = false
 optimizer_runs = 1_000
 remappings = [
@@ -13,3 +13,9 @@ remappings = [
     'surl/=lib/surl/src',
 ]
 ffi = true
+
+[rpc_endpoints]
+#mainnet="${MAINNET_RPC_URL}"
+sepolia="${SEPOLIA_RPC_URL}"
+#avalanche_fuji=
+#avalanche="${AVALANCHE_RPC_URL}"
